@@ -1,6 +1,6 @@
 # DMAppearance
 Custom proxy with partial UIApearance functionality to facilitate appearance sweets for any other object apart from UIKit ones.
-Unlike any other cuustom appearances which you can find in the internet this one keeps track of the original method calls and does not apply the style from appearance to the reciever for those methods.
+This implementation keeps track of the original method calls and does not apply the style from appearance to the reciever for those methods.
 
 ## How To Use
 ``` objc

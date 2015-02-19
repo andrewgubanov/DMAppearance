@@ -164,6 +164,18 @@ static void* DMReplacementMethod(id self, SEL _cmd, ...)
     @synchronized (recorder.originalIMPs) {
         originalIMP = [recorder.originalIMPs[NSStringFromSelector(_cmd)] pointerValue];
     }
+    @synchronized (recorder.calledOriginals) {
+        NSValue *key = [NSValue valueWithNonretainedObject:self];
+        NSMutableArray *records = recorder.calledOriginals[key];
+        if (records == nil) {
+            records = [NSMutableArray array];
+            recorder.calledOriginals[key] = records;
+        }
+        NSString *record = NSStringFromSelector(_cmd);
+        if (![records containsObject:record]) {
+            [records addObject:record];
+        }
+    }
     //swizzle back to original imp, so it could be correctly handleled in [invocation invoke];
     Method method = class_getInstanceMethod([self class], _cmd);
     method_setImplementation(method, originalIMP);
@@ -207,19 +219,6 @@ static void* DMReplacementMethod(id self, SEL _cmd, ...)
         }
     }
     va_end(arguments);
-    
-    @synchronized (recorder.calledOriginals) {
-        NSValue *key = [NSValue valueWithNonretainedObject:self];
-        NSMutableArray *records = recorder.calledOriginals[key];
-        if (records == nil) {
-            records = [NSMutableArray array];
-            recorder.calledOriginals[key] = records;
-        }
-        NSString *record = NSStringFromSelector(_cmd);
-        if (![records containsObject:record]) {
-            [records addObject:record];
-        }
-    }
     
     [invocation invoke];
     

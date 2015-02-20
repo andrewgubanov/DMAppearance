@@ -10,7 +10,7 @@ Pod::Spec.new do |s|
     :type => 'MIT',
     :file => 'LICENSE.md'
   }
-  s.author = { "Hyper" => "andrew.gubanov@icloud.com" }
+  s.author = { "AG" => "andrew.gubanov@icloud.com" }
   s.platform = :ios, '7.0'
   s.source = {
     :git => 'https://github.com/andrewgubanov/DMAppearance.git',

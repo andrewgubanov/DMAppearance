@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name = "DMAppearance"
-  s.version = "0.1"
+  s.version = "0.1.1"
   s.summary = "Partial functionality from UIAppearance proxy for custom objects"
   s.description = <<-DESC
                    * Partial functionality from UIAppearance proxy for custom objects apart from UIKit ones

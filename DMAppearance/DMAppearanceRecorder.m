@@ -15,21 +15,16 @@
 static NSMutableDictionary *sDMClassRecorders = nil;
 
 static void* DMReplacementMethod(id self, SEL _cmd, ...);
+static void fillInvocationWithArguments(NSInvocation *anInvocation, va_list anArguments, NSMethodSignature *aMethodSignature);
+typedef void (^DMDecodingBlock)(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex);
+
 
 @interface NSString (DMAppearanceRecorderEncoding)
-- (BOOL)dm_isEqualToOBJCEncodedType:(const char *)aType;
 - (BOOL)dm_hasCaseInsensitivePrefix:(NSString *)aPrefix;
 - (NSString *)dm_stringByRemovingEnodingQualifiers;
 @end
 
 @implementation NSString (Encoding)
-
-- (BOOL)dm_isEqualToOBJCEncodedType:(const char *)aType
-{
-    NSString *encodingType = [[NSString stringWithUTF8String:aType] dm_stringByRemovingEnodingQualifiers];
-    NSString *source = [self dm_stringByRemovingEnodingQualifiers];
-    return [source isEqualToString:encodingType];
-}
 
 - (BOOL)dm_hasCaseInsensitivePrefix:(NSString *)aPrefix
 {
@@ -184,40 +179,10 @@ static void* DMReplacementMethod(id self, SEL _cmd, ...)
     NSInvocation *invocation = [NSInvocation invocationWithMethodSignature:methodSignature];
     invocation.selector = _cmd;
     invocation.target = self;
+    
     va_list arguments;
     va_start(arguments, _cmd);
-    
-    NSUInteger count = [methodSignature numberOfArguments];
-    for (NSUInteger index = 2; index < count; index++) {
-        NSString *argumentType = [NSString stringWithUTF8String:[methodSignature getArgumentTypeAtIndex:index]];
-        if ([argumentType dm_hasCaseInsensitivePrefix:@"@"]) {
-            id token = va_arg(arguments, id);
-            [invocation setArgument:&token atIndex:index];
-        } else if ([argumentType dm_isEqualToOBJCEncodedType:@encode(BOOL)]) {
-            BOOL token = va_arg(arguments, int);
-            [invocation setArgument:&token atIndex:index];
-        } else if ([argumentType dm_isEqualToOBJCEncodedType:@encode(NSInteger)]) {
-            NSInteger token = va_arg(arguments, NSInteger);
-            [invocation setArgument:&token atIndex:index];
-        } else if ([argumentType dm_isEqualToOBJCEncodedType:@encode(NSUInteger)]) {
-            NSUInteger token = va_arg(arguments, NSUInteger);
-            [invocation setArgument:&token atIndex:index];
-        } else if ( ([argumentType dm_isEqualToOBJCEncodedType:@encode(double)]) && CGFLOAT_IS_DOUBLE) {
-            CGFloat token = va_arg(arguments, double);
-            [invocation setArgument:&token atIndex:index];
-        } else if ([argumentType dm_isEqualToOBJCEncodedType:@encode(CGPoint)]) {
-            CGPoint token = va_arg(arguments, CGPoint);
-            [invocation setArgument:&token atIndex:index];
-        } else if ([argumentType dm_isEqualToOBJCEncodedType:@encode(CGSize)]) {
-            CGSize token = va_arg(arguments, CGSize);
-            [invocation setArgument:&token atIndex:index];
-        } else if ([argumentType dm_isEqualToOBJCEncodedType:@encode(CGRect)]) {
-            CGRect token = va_arg(arguments, CGRect);
-            [invocation setArgument:&token atIndex:index];
-        } else {
-            abort();
-        }
-    }
+    fillInvocationWithArguments(invocation, arguments, methodSignature);
     va_end(arguments);
     
     [invocation invoke];
@@ -230,4 +195,79 @@ static void* DMReplacementMethod(id self, SEL _cmd, ...)
         [invocation getReturnValue:&returnValue];
     }
     return returnValue;
+}
+
+static void fillInvocationWithArguments(NSInvocation *anInvocation, va_list anArguments, NSMethodSignature *aMethodSignature)
+{
+    static dispatch_once_t onceToken;
+    static NSMutableDictionary *sDMArgumentsDecoder = nil;
+    dispatch_once(&onceToken, ^{
+        sDMArgumentsDecoder = [[NSMutableDictionary alloc] init];
+        
+        DMDecodingBlock decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            id token = va_arg(anArguments, id);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        sDMArgumentsDecoder[@"@"] = decodingBlock;
+        
+        decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            BOOL token = va_arg(anArguments, int);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        NSString *key = [[[NSString stringWithUTF8String:@encode(BOOL)] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        sDMArgumentsDecoder[key] = decodingBlock;
+        
+        decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            NSInteger token = va_arg(anArguments, NSInteger);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        key = [[[NSString stringWithUTF8String:@encode(NSInteger)] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        sDMArgumentsDecoder[key] = decodingBlock;
+        
+        decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            NSUInteger token = va_arg(anArguments, NSUInteger);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        key = [[[NSString stringWithUTF8String:@encode(NSUInteger)] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        sDMArgumentsDecoder[key] = decodingBlock;
+        
+        decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            CGFloat token = va_arg(anArguments, double);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        key = [[[NSString stringWithUTF8String:@encode(double)] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        sDMArgumentsDecoder[key] = decodingBlock;
+        
+        decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            CGPoint token = va_arg(anArguments, CGPoint);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        key = [[[NSString stringWithUTF8String:@encode(CGPoint)] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        sDMArgumentsDecoder[key] = decodingBlock;
+        
+        decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            CGSize token = va_arg(anArguments, CGSize);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        key = [[[NSString stringWithUTF8String:@encode(CGSize)] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        sDMArgumentsDecoder[key] = decodingBlock;
+        
+        decodingBlock = ^(NSInvocation *anInvocation, va_list anArguments, NSInteger anIndex) {
+            CGRect token = va_arg(anArguments, CGRect);
+            [anInvocation setArgument:&token atIndex:anIndex];
+        };
+        key = [[[NSString stringWithUTF8String:@encode(CGRect)] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        sDMArgumentsDecoder[key] = decodingBlock;
+    });
+    
+    NSUInteger count = [aMethodSignature numberOfArguments];
+    for (NSUInteger index = 2; index < count; index++) {
+        NSString *argumentType = [[[NSString stringWithUTF8String:[aMethodSignature getArgumentTypeAtIndex:index]] dm_stringByRemovingEnodingQualifiers] uppercaseString];
+        DMDecodingBlock decodingBlock = sDMArgumentsDecoder[argumentType];
+        if (decodingBlock == nil) {
+            abort();
+        } else {
+            decodingBlock(anInvocation, anArguments, index);
+        }
+    }
 }
